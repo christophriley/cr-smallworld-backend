@@ -61,4 +61,40 @@ app.MapGet("/balances", (WalletDb db) =>
     return db.Wallets.ToDictionary(wallet => wallet.Id, wallet => wallet.Balance);
 });
 
+app.MapPut("/transactions", async (Transaction transaction, TransactionDb transactionDb, WalletDb walletDb) =>
+{
+    if (transaction.Amount <= 0)
+    {
+        return Results.BadRequest("Amount must be greater than 0");
+    }
+    if (transaction.CreditWalletId == null)
+    {
+        return Results.BadRequest("Credit wallet ID is required");
+    }
+    if (transaction.CreditWalletId == transaction.DebitWalletId)
+    {
+        return Results.BadRequest("Cannot transfer to the same wallet");
+    }
+
+    var fromWallet = await walletDb.Wallets.FindAsync(transaction.CreditWalletId);
+    var toWallet = await walletDb.Wallets.FindAsync(transaction.DebitWalletId);
+
+    if (fromWallet == null)
+    {
+        return Results.NotFound("Credit wallet not found");
+    }
+
+    if (toWallet == null)
+    {
+        return Results.NotFound("Debit wallet not found");
+    }
+
+    if (fromWallet.Balance < transaction.Amount)
+    {
+        return Results.BadRequest("Insufficient funds");
+    }
+
+
+});
+
 app.Run();
