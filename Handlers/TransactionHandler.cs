@@ -114,23 +114,34 @@ public class TransactionHandler(TransactionDb pointsBalanceDb, WalletDb walletDb
 
         var allTransactions = _transactionDb.Transactions.ToList();
 
-        var previousDebitTransactions = _transactionDb.Transactions
-            .Where(t => t.DebitWalletId == transaction.DebitWalletId)
-            .OrderBy(t => t.TimeStamp);
+        var previousDebitTransactions = await _transactionDb.Transactions
+            .Where(t => t.DebitWalletId == transaction.CreditWalletId)
+            .OrderBy(t => t.TimeStamp)
+            .ToListAsync();
+
+        long consumedSoFar = 0;
+        var debitTransactionsToConsume = previousDebitTransactions
+        .TakeWhile(t =>
+        {
+            var exceeded = (t.Points - t.SpentPoints) > transaction.Points;
+            consumedSoFar += t.Points - t.SpentPoints;
+            return exceeded;
+        })
+        .ToList(); // Materialize the query here
 
         // Filter the previous transactions to get the ones that will be consumed
         // by the current transaction
-        var debitTransactionsToConsume = await previousDebitTransactions
-            .Select(t => new
-            {
-                Transaction = t,
-                RunningTotal = _transactionDb.Transactions
-                    .Where(t2 => t2.DebitWalletId == transaction.DebitWalletId && t2.TimeStamp <= t.TimeStamp)
-                    .Sum(t2 => t2.Points - t2.SpentPoints)
-            })
-            .Where(x => x.RunningTotal < transaction.Points)
-            .Select(x => x.Transaction)
-            .ToListAsync();
+        // var debitTransactionsToConsume = await previousDebitTransactions
+        //     .Select(t => new
+        //     {
+        //         Transaction = t,
+        //         RunningTotal = _transactionDb.Transactions
+        //             .Where(t2 => t2.DebitWalletId == transaction.DebitWalletId && t2.TimeStamp <= t.TimeStamp)
+        //             .Sum(t2 => t2.Points - t2.SpentPoints)
+        //     })
+        //     .Where(x => x.RunningTotal < transaction.Points)
+        //     .Select(x => x.Transaction)
+        //     .ToListAsync();
 
         // Consume points from each of these previous transactions until the
         // current transaction amount is reached
