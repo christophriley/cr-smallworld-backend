@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using CRSmallWorldBackend.Models;
+using YamlDotNet.Core.Tokens;
 
 namespace CRSmallWorldBackend.Handlers;
 
@@ -50,6 +51,59 @@ public class TransactionHandler(TransactionDb pointsBalanceDb, WalletDb walletDb
         }
 
         return null;
+    }
+
+    protected async Task<List<PointDeduction>> ConsumePointsFromPreviousTransactions(Transaction newTransaction)
+    {
+        List<PointDeduction> pointDeductions = [];
+        // var previousDebitTransactions = await _transactionDb.Transactions
+        //     .Where(t => t.DebitWalletId == transaction.CreditWalletId)
+        //     .OrderBy(t => t.TimeStamp)
+        //     .ToListAsync();
+
+        // long consumedSoFar = 0;
+        // var debitTransactionsToConsume = previousDebitTransactions
+        // .TakeWhile(t =>
+        // {
+        //     var exceeded = (t.Points - t.SpentPoints) > transaction.Points;
+        //     consumedSoFar += t.Points - t.SpentPoints;
+        //     return exceeded;
+        // })
+        // .ToList();
+
+        var debitTransactionsToConsume = await _transactionDb.Transactions
+            .Where(t => t.DebitWalletId == newTransaction.CreditWalletId)
+            .OrderBy(t => t.TimeStamp)
+            .Select(t => new
+            {
+                Transaction = t,
+                CumulativePoints = _transactionDb.Transactions
+                    .Where(t2 => t2.DebitWalletId == newTransaction.CreditWalletId && t2.TimeStamp <= t.TimeStamp)
+                    .Sum(t2 => t2.Points - t2.SpentPoints)
+            })
+            .Where(x => x.CumulativePoints - (x.Transaction.Points - x.Transaction.SpentPoints) <= newTransaction.Points)
+            .Select(x => x.Transaction)
+            .ToListAsync();
+
+        // Consume points from each of these previous transactions until the
+        // current transaction amount is reached
+        long totalConsumedPoints = 0;
+        foreach (var debitTransaction in debitTransactionsToConsume)
+        {
+            var remainingPoints = debitTransaction.Points - debitTransaction.SpentPoints;
+            var pointsToConsume = Math.Min(remainingPoints, newTransaction.Points - totalConsumedPoints);
+
+            debitTransaction.SpentPoints += pointsToConsume;
+            totalConsumedPoints += pointsToConsume;
+
+            pointDeductions.Add(new PointDeduction
+            {
+                WalletId = debitTransaction.DebitWalletId,
+                Points = pointsToConsume
+            });
+        }
+
+        return pointDeductions;
     }
 
     /* This is how points enter the economy. Care needs to be taken that it is
@@ -112,47 +166,12 @@ public class TransactionHandler(TransactionDb pointsBalanceDb, WalletDb walletDb
         var walletValidationError = ValidateWallets(fromWallet, toWallet, transaction.Points);
         if (walletValidationError != null) return walletValidationError;
 
-        var allTransactions = _transactionDb.Transactions.ToList();
+        var pointDeductions = await ConsumePointsFromPreviousTransactions(transaction);
 
-        var previousDebitTransactions = await _transactionDb.Transactions
-            .Where(t => t.DebitWalletId == transaction.CreditWalletId)
-            .OrderBy(t => t.TimeStamp)
-            .ToListAsync();
-
-        long consumedSoFar = 0;
-        var debitTransactionsToConsume = previousDebitTransactions
-        .TakeWhile(t =>
+        // throw an error if the sum of pointDeductions is less than the transaction.Points
+        if (pointDeductions.Sum(pd => pd.Points) < transaction.Points)
         {
-            var exceeded = (t.Points - t.SpentPoints) > transaction.Points;
-            consumedSoFar += t.Points - t.SpentPoints;
-            return exceeded;
-        })
-        .ToList(); // Materialize the query here
-
-        // Filter the previous transactions to get the ones that will be consumed
-        // by the current transaction
-        // var debitTransactionsToConsume = await previousDebitTransactions
-        //     .Select(t => new
-        //     {
-        //         Transaction = t,
-        //         RunningTotal = _transactionDb.Transactions
-        //             .Where(t2 => t2.DebitWalletId == transaction.DebitWalletId && t2.TimeStamp <= t.TimeStamp)
-        //             .Sum(t2 => t2.Points - t2.SpentPoints)
-        //     })
-        //     .Where(x => x.RunningTotal < transaction.Points)
-        //     .Select(x => x.Transaction)
-        //     .ToListAsync();
-
-        // Consume points from each of these previous transactions until the
-        // current transaction amount is reached
-        long totalConsumedPoints = 0;
-        foreach (var debitTransaction in debitTransactionsToConsume)
-        {
-            var remainingPoints = debitTransaction.Points - debitTransaction.SpentPoints;
-            var pointsToConsume = Math.Min(remainingPoints, transaction.Points - totalConsumedPoints);
-
-            debitTransaction.SpentPoints += pointsToConsume;
-            totalConsumedPoints += pointsToConsume;
+            return Results.Problem("Could not find enough points to deduct");
         }
 
         // Update the wallet balances
@@ -173,6 +192,6 @@ public class TransactionHandler(TransactionDb pointsBalanceDb, WalletDb walletDb
         await _transactionDb.SaveChangesAsync();
         scope.Complete(); // Commit the database transaction
 
-        return Results.Ok();
+        return Results.Ok(pointDeductions);
     }
 }
