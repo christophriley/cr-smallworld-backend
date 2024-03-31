@@ -8,6 +8,7 @@ public interface ITransactionHandler
 {
     Task<IResult> GiftPoints(string toWalletId, long points);
     Task<IResult> ProcessTransaction(Transaction transaction);
+    Task<IResult> SpendPoints(string walletId, long points);
 }
 
 public class TransactionHandler(TransactionDb pointsBalanceDb, WalletDb walletDb) : ITransactionHandler

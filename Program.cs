@@ -59,7 +59,52 @@ app.MapPut("/gifts", async (Gift gift, ITransactionHandler transactionHandler) =
 
 app.MapPut("/spends", async (Spend spend, ITransactionHandler transactionHandler) =>
 {
-    return await transactionHandler.GiftPoints(spend.FromWalletId, spend.Points);
+    return await transactionHandler.SpendPoints(spend.FromWalletId, spend.Points);
 });
+
+app.MapGet("/test", async (WalletDb db) =>
+{
+    // replicate transactions from exercise spec
+    List<Transaction> testTransactions = [
+        new() {
+            CreditWalletId = "8c18b5bf-0171-4918-a611-bde754382f7a",
+            DebitWalletId = "363a3f19-7fa9-4e34-851d-6e42ef92a285",
+            Points = 1000,
+            TimeStamp = DateTime.Parse("2021-11-02T14:00:00Z"),
+        },
+        new() {
+            CreditWalletId = "21f51c05-e556-41f1-9cc9-0a314bb2ebcc",
+            DebitWalletId = "363a3f19-7fa9-4e34-851d-6e42ef92a285",
+            Points = 200,
+            TimeStamp = DateTime.Parse("2021-10-31T11:00:00Z"),
+        },
+        new() {
+            CreditWalletId = "8c18b5bf-0171-4918-a611-bde754382f7a",
+            DebitWalletId = "363a3f19-7fa9-4e34-851d-6e42ef92a285",
+            Points = 200,
+            TimeStamp = DateTime.Parse("2021-10-31T15:00:00Z"),
+        },
+        new() {
+            CreditWalletId = "d5af01f0-515a-4834-ab4e-a2f54aeaedbf",
+            DebitWalletId = "363a3f19-7fa9-4e34-851d-6e42ef92a285",
+            Points = 10000,
+            TimeStamp = DateTime.Parse("2021-11-01T14:00:00Z"),
+        },
+        new() {
+            CreditWalletId = "8c18b5bf-0171-4918-a611-bde754382f7a",
+            DebitWalletId = "363a3f19-7fa9-4e34-851d-6e42ef92a285",
+            Points = 300,
+            TimeStamp = DateTime.Parse("2021-10-31T10:00:00Z"),
+        },
+    ];
+
+    foreach (var transaction in testTransactions)
+    {
+        await transactionHandler.ProcessTransaction(transaction);
+    }
+
+    return db.Wallets.ToDictionary(wallet => wallet.Id, wallet => wallet.Balance);
+});
+
 
 app.Run();
