@@ -1,12 +1,11 @@
 using Microsoft.EntityFrameworkCore;
 using CRSmallWorldBackend.Models;
-using YamlDotNet.Core.Tokens;
 
 namespace CRSmallWorldBackend.Handlers;
 
 public interface ITransactionHandler
 {
-    Task<IResult> GiftPoints(string toWalletId, long points);
+    Task<IResult> GiftPoints(string toWalletId, long points, DateTime? timeStamp = null);
     Task<IResult> ProcessTransaction(Transaction transaction);
     Task<IResult> SpendPoints(string walletId, long points);
 }
@@ -85,7 +84,7 @@ public class TransactionHandler(TransactionDb pointsBalanceDb, WalletDb walletDb
 
             pointDeductions.Add(new PointDeduction
             {
-                WalletId = debitTransaction.DebitWalletId!,
+                WalletId = debitTransaction.CreditWalletId!,
                 Points = pointsToConsume
             });
         }
@@ -96,7 +95,7 @@ public class TransactionHandler(TransactionDb pointsBalanceDb, WalletDb walletDb
     /* This is how points enter the economy. Care needs to be taken that it is
         only called by trusted sources, as it can be used to inflate the economy
     */
-    public async Task<IResult> GiftPoints(string toWalletId, long points)
+    public async Task<IResult> GiftPoints(string toWalletId, long points, DateTime? timeStamp)
     {
         var toWallet = await _walletDb.Wallets.FindAsync(toWalletId);
         if (toWallet == null)
@@ -111,7 +110,7 @@ public class TransactionHandler(TransactionDb pointsBalanceDb, WalletDb walletDb
 
         Transaction transaction = new()
         {
-            TimeStamp = DateTime.Now,
+            TimeStamp = timeStamp ?? DateTime.Now,
             Points = points,
             DebitWalletId = toWalletId
         };

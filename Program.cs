@@ -1,5 +1,6 @@
 using CRSmallWorldBackend.Handlers;
 using CRSmallWorldBackend.Models;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -32,14 +33,22 @@ if (app.Environment.IsDevelopment())
 
 var scope = app.Services.CreateScope();
 var transactionHandler = scope.ServiceProvider.GetRequiredService<ITransactionHandler>();
-await transactionHandler.GiftPoints("8c18b5bf-0171-4918-a611-bde754382f7a", 2500);
-await transactionHandler.GiftPoints("21f51c05-e556-41f1-9cc9-0a314bb2ebcc", 200);
-await transactionHandler.GiftPoints("d5af01f0-515a-4834-ab4e-a2f54aeaedbf", 15300);
-await transactionHandler.GiftPoints("363a3f19-7fa9-4e34-851d-6e42ef92a285", 0);
+await transactionHandler.GiftPoints("8c18b5bf-0171-4918-a611-bde754382f7a", 2500, DateTime.Parse("2021-10-01T11:00:00Z"));
+await transactionHandler.GiftPoints("21f51c05-e556-41f1-9cc9-0a314bb2ebcc", 200, DateTime.Parse("2021-10-01T11:00:00Z"));
+await transactionHandler.GiftPoints("d5af01f0-515a-4834-ab4e-a2f54aeaedbf", 15300, DateTime.Parse("2021-10-01T11:00:00Z"));
+await transactionHandler.GiftPoints("363a3f19-7fa9-4e34-851d-6e42ef92a285", 0, DateTime.Parse("2021-10-01T11:00:00Z"));
 
-app.MapGet("/balances", (WalletDb db) =>
+app.MapGet("/wallets", (WalletDb db) =>
 {
     return db.Wallets.ToDictionary(wallet => wallet.Id, wallet => wallet.Balance);
+});
+
+app.MapPut("/wallets", async ([FromBody] string WalletId, WalletDb db) =>
+{
+    var newWallet = new Wallet { Id = WalletId, Balance = 0 };
+    db.Wallets.Add(newWallet);
+    await db.SaveChangesAsync();
+    return Results.Created($"/wallets/{newWallet.Id}", newWallet);
 });
 
 app.MapPut("/transactions", async (Transaction transaction, TransactionDb transactionDb, WalletDb walletDb, ITransactionHandler transactionHandler) =>
@@ -49,7 +58,9 @@ app.MapPut("/transactions", async (Transaction transaction, TransactionDb transa
 
 app.MapGet("/transactions", (TransactionDb db) =>
 {
-    return db.Transactions.ToList();
+    return db.Transactions
+        .OrderByDescending(transaction => transaction.TimeStamp)
+        .ToList();
 });
 
 app.MapPut("/gifts", async (Gift gift, ITransactionHandler transactionHandler) =>
