@@ -1,11 +1,12 @@
 using CRSmallWorldBackend;
+using CRSmallWorldBackend.Handlers;
+using CRSmallWorldBackend.Models;
 using Microsoft.EntityFrameworkCore;
-using NSwag.AspNetCore;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddDbContext<WalletDb>(options => options.UseInMemoryDatabase("Wallets"));
-builder.Services.AddDbContext<PointsBalanceDb>(options => options.UseInMemoryDatabase("PointsBalances"));
 builder.Services.AddDbContext<TransactionDb>(options => options.UseInMemoryDatabase("Transactions"));
+builder.Services.AddScoped<ITransactionHandler, TransactionHandler>();
 builder.Services.AddDatabaseDeveloperPageExceptionFilter();
 
 builder.Services.AddEndpointsApiExplorer();
@@ -40,7 +41,7 @@ void InitializeWallet(string walletId, long points)
     var transaction = new Transaction
     {
         TimeStamp = DateTime.Now,
-        Amount = points,
+        Points = points,
         DebitWalletId = walletId
     };
     var scope = app.Services.CreateScope();
@@ -61,40 +62,9 @@ app.MapGet("/balances", (WalletDb db) =>
     return db.Wallets.ToDictionary(wallet => wallet.Id, wallet => wallet.Balance);
 });
 
-app.MapPut("/transactions", async (Transaction transaction, TransactionDb transactionDb, WalletDb walletDb) =>
+app.MapPut("/transactions", async (Transaction transaction, TransactionDb transactionDb, WalletDb walletDb, ITransactionHandler transactionHandler) =>
 {
-    if (transaction.Amount <= 0)
-    {
-        return Results.BadRequest("Amount must be greater than 0");
-    }
-    if (transaction.CreditWalletId == null)
-    {
-        return Results.BadRequest("Credit wallet ID is required");
-    }
-    if (transaction.CreditWalletId == transaction.DebitWalletId)
-    {
-        return Results.BadRequest("Cannot transfer to the same wallet");
-    }
-
-    var fromWallet = await walletDb.Wallets.FindAsync(transaction.CreditWalletId);
-    var toWallet = await walletDb.Wallets.FindAsync(transaction.DebitWalletId);
-
-    if (fromWallet == null)
-    {
-        return Results.NotFound("Credit wallet not found");
-    }
-
-    if (toWallet == null)
-    {
-        return Results.NotFound("Debit wallet not found");
-    }
-
-    if (fromWallet.Balance < transaction.Amount)
-    {
-        return Results.BadRequest("Insufficient funds");
-    }
-
-
+    return await transactionHandler.ProcessTransaction(transaction);
 });
 
 app.Run();
