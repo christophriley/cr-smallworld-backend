@@ -5,6 +5,7 @@ namespace CRSmallWorldBackend.Handlers;
 
 public interface ITransactionHandler
 {
+    Task<IResult> GiftPoints(string toWalletId, long points);
     Task<IResult> ProcessTransaction(Transaction transaction);
 }
 
@@ -51,6 +52,45 @@ public class TransactionHandler(TransactionDb pointsBalanceDb, WalletDb walletDb
         return null;
     }
 
+    /* This is how points enter the economy. Care needs to be taken that it is
+        only called by trusted sources, as it can be used to inflate the economy
+    */
+    public async Task<IResult> GiftPoints(string toWalletId, long points)
+    {
+        var toWallet = await _walletDb.Wallets.FindAsync(toWalletId);
+        if (toWallet == null)
+        {
+            toWallet = new Wallet
+            {
+                Id = toWalletId,
+                Balance = 0
+            };
+            _walletDb.Wallets.Add(toWallet);
+        }
+
+        Transaction transaction = new()
+        {
+            TimeStamp = DateTime.Now,
+            Points = points,
+            DebitWalletId = toWalletId
+        };
+
+        toWallet.Balance += points;
+        _transactionDb.Transactions.Add(transaction);
+
+        using var scope = new System.Transactions.TransactionScope(
+            System.Transactions.TransactionScopeOption.Required,
+            new System.Transactions.TransactionOptions
+            {
+                IsolationLevel = System.Transactions.IsolationLevel.Serializable
+            });
+        await _walletDb.SaveChangesAsync();
+        await _transactionDb.SaveChangesAsync();
+        scope.Complete(); // Commit the database transaction
+
+        return Results.Ok(toWallet);
+    }
+
 
     /*
         Process a transaction
@@ -72,6 +112,8 @@ public class TransactionHandler(TransactionDb pointsBalanceDb, WalletDb walletDb
         var walletValidationError = ValidateWallets(fromWallet, toWallet, transaction.Points);
         if (walletValidationError != null) return walletValidationError;
 
+        var allTransactions = _transactionDb.Transactions.ToList();
+
         var previousDebitTransactions = _transactionDb.Transactions
             .Where(t => t.DebitWalletId == transaction.DebitWalletId)
             .OrderBy(t => t.TimeStamp);
@@ -79,7 +121,15 @@ public class TransactionHandler(TransactionDb pointsBalanceDb, WalletDb walletDb
         // Filter the previous transactions to get the ones that will be consumed
         // by the current transaction
         var debitTransactionsToConsume = await previousDebitTransactions
-            .TakeWhile(t => (t.Points - t.SpentPoints) < transaction.Points)
+            .Select(t => new
+            {
+                Transaction = t,
+                RunningTotal = _transactionDb.Transactions
+                    .Where(t2 => t2.DebitWalletId == transaction.DebitWalletId && t2.TimeStamp <= t.TimeStamp)
+                    .Sum(t2 => t2.Points - t2.SpentPoints)
+            })
+            .Where(x => x.RunningTotal < transaction.Points)
+            .Select(x => x.Transaction)
             .ToListAsync();
 
         // Consume points from each of these previous transactions until the
@@ -102,7 +152,15 @@ public class TransactionHandler(TransactionDb pointsBalanceDb, WalletDb walletDb
         _transactionDb.Transactions.Add(transaction);
 
         // Commit all of the above in an atomic database transaction
+        using var scope = new System.Transactions.TransactionScope(
+            System.Transactions.TransactionScopeOption.Required,
+            new System.Transactions.TransactionOptions
+            {
+                IsolationLevel = System.Transactions.IsolationLevel.Serializable
+            });
+        await _walletDb.SaveChangesAsync();
         await _transactionDb.SaveChangesAsync();
+        scope.Complete(); // Commit the database transaction
 
         return Results.Ok();
     }
