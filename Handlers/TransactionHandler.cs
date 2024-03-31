@@ -56,20 +56,6 @@ public class TransactionHandler(TransactionDb pointsBalanceDb, WalletDb walletDb
     protected async Task<List<PointDeduction>> ConsumePointsFromPreviousTransactions(Transaction newTransaction)
     {
         List<PointDeduction> pointDeductions = [];
-        // var previousDebitTransactions = await _transactionDb.Transactions
-        //     .Where(t => t.DebitWalletId == transaction.CreditWalletId)
-        //     .OrderBy(t => t.TimeStamp)
-        //     .ToListAsync();
-
-        // long consumedSoFar = 0;
-        // var debitTransactionsToConsume = previousDebitTransactions
-        // .TakeWhile(t =>
-        // {
-        //     var exceeded = (t.Points - t.SpentPoints) > transaction.Points;
-        //     consumedSoFar += t.Points - t.SpentPoints;
-        //     return exceeded;
-        // })
-        // .ToList();
 
         var debitTransactionsToConsume = await _transactionDb.Transactions
             .Where(t => t.DebitWalletId == newTransaction.CreditWalletId)
