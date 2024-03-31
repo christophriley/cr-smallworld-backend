@@ -31,31 +31,12 @@ if (app.Environment.IsDevelopment())
     });
 }
 
-void InitializeWallet(string walletId, long points)
-{
-    var wallet = new Wallet
-    {
-        Id = walletId,
-        Balance = points
-    };
-    var transaction = new Transaction
-    {
-        TimeStamp = DateTime.Now,
-        Points = points,
-        DebitWalletId = walletId
-    };
-    var scope = app.Services.CreateScope();
-    var walletDb = scope.ServiceProvider.GetRequiredService<WalletDb>();
-    var transactionDb = scope.ServiceProvider.GetRequiredService<TransactionDb>();
-    walletDb.Wallets.Add(wallet);
-    transactionDb.Transactions.Add(transaction);
-    walletDb.SaveChanges();
-}
-
-InitializeWallet("8c18b5bf-0171-4918-a611-bde754382f7a", 2500);
-InitializeWallet("21f51c05-e556-41f1-9cc9-0a314bb2ebcc", 200);
-InitializeWallet("d5af01f0-515a-4834-ab4e-a2f54aeaedbf", 15300);
-InitializeWallet("363a3f19-7fa9-4e34-851d-6e42ef92a285", 0);
+var scope = app.Services.CreateScope();
+var transactionHandler = scope.ServiceProvider.GetRequiredService<ITransactionHandler>();
+await transactionHandler.GiftPoints("8c18b5bf-0171-4918-a611-bde754382f7a", 2500);
+await transactionHandler.GiftPoints("21f51c05-e556-41f1-9cc9-0a314bb2ebcc", 200);
+await transactionHandler.GiftPoints("d5af01f0-515a-4834-ab4e-a2f54aeaedbf", 15300);
+await transactionHandler.GiftPoints("363a3f19-7fa9-4e34-851d-6e42ef92a285", 0);
 
 app.MapGet("/balances", (WalletDb db) =>
 {
@@ -65,6 +46,16 @@ app.MapGet("/balances", (WalletDb db) =>
 app.MapPut("/transactions", async (Transaction transaction, TransactionDb transactionDb, WalletDb walletDb, ITransactionHandler transactionHandler) =>
 {
     return await transactionHandler.ProcessTransaction(transaction);
+});
+
+app.MapGet("/transactions", (TransactionDb db) =>
+{
+    return db.Transactions.ToList();
+});
+
+app.MapPut("/gifts", async (Gift gift, ITransactionHandler transactionHandler) =>
+{
+    return await transactionHandler.GiftPoints(gift.ToWalletId, gift.Points);
 });
 
 app.Run();
