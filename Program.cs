@@ -31,13 +31,6 @@ if (app.Environment.IsDevelopment())
     });
 }
 
-var scope = app.Services.CreateScope();
-var transactionHandler = scope.ServiceProvider.GetRequiredService<ITransactionHandler>();
-await transactionHandler.GiftPoints("8c18b5bf-0171-4918-a611-bde754382f7a", 2500, DateTime.Parse("2021-10-01T11:00:00Z"));
-await transactionHandler.GiftPoints("21f51c05-e556-41f1-9cc9-0a314bb2ebcc", 200, DateTime.Parse("2021-10-01T11:00:00Z"));
-await transactionHandler.GiftPoints("d5af01f0-515a-4834-ab4e-a2f54aeaedbf", 15300, DateTime.Parse("2021-10-01T11:00:00Z"));
-await transactionHandler.GiftPoints("363a3f19-7fa9-4e34-851d-6e42ef92a285", 0, DateTime.Parse("2021-10-01T11:00:00Z"));
-
 app.MapGet("/wallets", (WalletDb db) =>
 {
     return db.Wallets.ToDictionary(wallet => wallet.Id, wallet => wallet.Balance);
@@ -73,8 +66,14 @@ app.MapPut("/spends", async (Spend spend, ITransactionHandler transactionHandler
     return await transactionHandler.SpendPoints(spend.FromWalletId, spend.Points);
 });
 
-app.MapGet("/test", async (WalletDb db) =>
+app.MapGet("/test", async (WalletDb db, ITransactionHandler transactionHandler) =>
 {
+    // Initialize wallet balances inferred from exercise spec
+    await transactionHandler.GiftPoints("8c18b5bf-0171-4918-a611-bde754382f7a", 2500, DateTime.Parse("2021-10-01T11:00:00Z"));
+    await transactionHandler.GiftPoints("21f51c05-e556-41f1-9cc9-0a314bb2ebcc", 200, DateTime.Parse("2021-10-01T11:00:00Z"));
+    await transactionHandler.GiftPoints("d5af01f0-515a-4834-ab4e-a2f54aeaedbf", 15300, DateTime.Parse("2021-10-01T11:00:00Z"));
+    await transactionHandler.GiftPoints("363a3f19-7fa9-4e34-851d-6e42ef92a285", 0, DateTime.Parse("2021-10-01T11:00:00Z"));
+
     // replicate transactions from exercise spec
     List<Transaction> testTransactions = [
         new() {
