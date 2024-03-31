@@ -57,4 +57,9 @@ app.MapPut("/gifts", async (Gift gift, ITransactionHandler transactionHandler) =
     return await transactionHandler.GiftPoints(gift.ToWalletId, gift.Points);
 });
 
+app.MapPut("/spends", async (Spend spend, ITransactionHandler transactionHandler) =>
+{
+    return await transactionHandler.GiftPoints(spend.FromWalletId, spend.Points);
+});
+
 app.Run();

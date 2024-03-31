@@ -84,7 +84,7 @@ public class TransactionHandler(TransactionDb pointsBalanceDb, WalletDb walletDb
 
             pointDeductions.Add(new PointDeduction
             {
-                WalletId = debitTransaction.DebitWalletId,
+                WalletId = debitTransaction.DebitWalletId!,
                 Points = pointsToConsume
             });
         }
@@ -154,7 +154,6 @@ public class TransactionHandler(TransactionDb pointsBalanceDb, WalletDb walletDb
 
         var pointDeductions = await ConsumePointsFromPreviousTransactions(transaction);
 
-        // throw an error if the sum of pointDeductions is less than the transaction.Points
         if (pointDeductions.Sum(pd => pd.Points) < transaction.Points)
         {
             return Results.Problem("Could not find enough points to deduct");
@@ -166,6 +165,49 @@ public class TransactionHandler(TransactionDb pointsBalanceDb, WalletDb walletDb
 
         // Insert the new transaction
         _transactionDb.Transactions.Add(transaction);
+
+        // Commit all of the above in an atomic database transaction
+        using var scope = new System.Transactions.TransactionScope(
+            System.Transactions.TransactionScopeOption.Required,
+            new System.Transactions.TransactionOptions
+            {
+                IsolationLevel = System.Transactions.IsolationLevel.Serializable
+            });
+        await _walletDb.SaveChangesAsync();
+        await _transactionDb.SaveChangesAsync();
+        scope.Complete(); // Commit the database transaction
+
+        return Results.Ok(pointDeductions);
+    }
+
+    public async Task<IResult> SpendPoints(string walletId, long points)
+    {
+        var wallet = await _walletDb.Wallets.FindAsync(walletId);
+        if (wallet == null)
+        {
+            return Results.NotFound("Wallet not found");
+        }
+
+        if (wallet.Balance < points)
+        {
+            return Results.BadRequest("Insufficient funds");
+        }
+
+        var spendTransaction = new Transaction
+        {
+            TimeStamp = DateTime.Now,
+            Points = points,
+            CreditWalletId = walletId
+        };
+
+        var pointDeductions = await ConsumePointsFromPreviousTransactions(spendTransaction);
+        if (pointDeductions.Sum(pd => pd.Points) < points)
+        {
+            return Results.Problem("Could not find enough points to deduct");
+        }
+
+        wallet.Balance -= points;
+        _transactionDb.Transactions.Add(spendTransaction);
 
         // Commit all of the above in an atomic database transaction
         using var scope = new System.Transactions.TransactionScope(

@@ -7,5 +7,5 @@ public class Transaction
     public required long Points { get; set; }
     public long SpentPoints { get; set; } = 0;
     public string? CreditWalletId { get; set; }
-    public required string DebitWalletId { get; set; }
+    public string? DebitWalletId { get; set; }
 }
