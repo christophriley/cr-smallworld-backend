@@ -1,7 +1,5 @@
 using CRSmallWorldBackend.Handlers;
 using CRSmallWorldBackend.Models;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddDbContext<WalletDb>(options => options.UseInMemoryDatabase("Wallets"));
