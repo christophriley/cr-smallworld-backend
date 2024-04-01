@@ -50,6 +50,13 @@ Not an endpoint I would ever deploy to production. This is purely a development 
 
 This will initialize wallets with gift values, then run the transactions listed in the spec. End balances will  match the spec values iff this endpoint is used, then a separate spend endpoint is used to spend the 5000 points.
 
+### Code Organization
+The entry point is `Program.cs`, but most of this code is framework boilerplate or mapping endpoints to code in more interesting places.
+
+The Models folder contains the code-first definitions of database objects and DTOs. In a larger project I would typically distinguish between actual database models and non-database models with a file naming convention or a separater folder. The database models also have a *Db.css file that defines the database context object used by Entity Framework.
+
+All of the really interesting code is in TransactionHandler.cs. The transaction handler gets injected into the endpoint functions where it's needed, and contains nearly all of the complexity in this project.
+
 ### Notes and Oddities
 * Since transactions are not allowed to result in negative balances, this can't be a zero-sum system - the points have to come from somewhere. I assume that "Points can be earned by taking certain actions or meeting certain objectives within the system..." means that points enter the economy from some other mechanism. I represent this with Transactions whose `CreditWalletId` is null.
 * Similarly, I represent "spend" transactions that remove points from the economy with Transactions whos `DebitWalletId` is null.
