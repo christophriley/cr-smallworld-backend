@@ -59,6 +59,7 @@ public class TransactionHandler(TransactionDb pointsBalanceDb, WalletDb walletDb
 
         var debitTransactionsToConsume = await _transactionDb.Transactions
             .Where(t => t.DebitWalletId == newTransaction.CreditWalletId)
+            .Where(t => t.Points - t.SpentPoints > 0)
             .OrderBy(t => t.TimeStamp)
             .Select(t => new
             {
